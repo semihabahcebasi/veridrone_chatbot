@@ -1,5 +1,7 @@
 import sqlite3
-
+import hmac
+import os
+from app.database import get_db
 from flask import Blueprint, jsonify, request
 from werkzeug.exceptions import BadRequest
 
@@ -46,6 +48,27 @@ def capture_lead():
         "message": "Başvurun alındı.",
         "lead_id": lead_id
     }), 201
+@main.get("/api/leads")
+def list_leads():
+    expected_key = os.environ.get("LEADS_API_KEY")
+    provided_key = request.headers.get("X-API-Key", "")
+
+    if not expected_key or not hmac.compare_digest(provided_key, expected_key):
+        return jsonify({"error": "Yetkisiz erişim."}), 401
+
+    try:
+        rows = get_db().execute(
+            """
+            SELECT id, full_name, email, phone, message
+            FROM leads
+            ORDER BY id DESC
+            """
+        ).fetchall()
+
+        return jsonify({"leads": [dict(row) for row in rows]})
+
+    except sqlite3.Error:
+        return jsonify({"error": "Başvurular alınamadı."}), 500
 
 @main.post("/api/chat")
 def chat():
